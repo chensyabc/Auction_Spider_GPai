@@ -8,6 +8,8 @@ import ssl
 import time, datetime
 import DateTimeUtil
 import UrlUtil
+from threading import Thread
+import threading
 
 
 class AuctionSpiderGPai:
@@ -128,9 +130,10 @@ class AuctionSpiderGPai:
             auction_json = self.get_auction_json(url, court_id, category_id, status_id)
             mysql.upsert_auction(auction_json)
 
-    def getData(self):
+    def spider_auctions(self, court_list):
         print("Start Craw...")
-        for court in mysql.get_courts():
+        for court in court_list:
+            print('Thread Id: ' + str(threading.currentThread().ident), end='')
             print(court)
             if int(court[3]) == 0:
                 print(court[2] + ": no auction")
@@ -163,6 +166,21 @@ class AuctionSpiderGPai:
 if __name__ == '__main__':
     auctionSpiderGPai = AuctionSpiderGPai()
     mysql = MySQL.MySQL()
-    print("start main progress" + DateTimeUtil.get_current_time())
-    auctionSpiderGPai.getData()
-    print("end main progress" + DateTimeUtil.get_current_time())
+    print(DateTimeUtil.get_current_time() + " start main progress")
+    # prepare
+    courts = mysql.get_courts()
+    thread_count = 3
+    each_count = len(courts) // thread_count
+    # start multiple thread
+    thread_array = {}
+    start_time = time.time()
+    for tid in range(thread_count):
+        # t = Thread(target=auctionSpiderGPai.spider_auctions, args=(courts[tid:(tid+1)],))
+        t = Thread(target=auctionSpiderGPai.spider_auctions, args=(courts[tid*each_count:(tid+1)*each_count],))
+        t.start()
+        thread_array[tid] = t
+    for i in range(thread_count):
+        thread_array[i].join()
+    end_time = time.time()
+    print("Total time: {}".format(end_time - start_time))
+    print(DateTimeUtil.get_current_time() + "end main progress")
