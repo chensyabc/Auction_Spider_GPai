@@ -122,16 +122,19 @@ class AuctionSpiderGPai:
             et_result = et_raw_result[0]
             auction_json[json_property] = et_result if start_index == 0 else et_result[start_index:]
 
-    def spider_auction_and_insert(self, url, court_id, category_id, status_id):
+    def spider_auction_and_insert(self, url, court_id, category_id, status_id, mysql_instance):
         item_html = UrlUtil.get_html_with_proxy(url)
         url_list = re.findall(re.compile(r'<a href="(\S*?)item2.do?(\S*?)"><img'), item_html.decode('utf8'))
         for urls in url_list:
             url = 'http://www.gpai.net/sf/item2.do' + urls[1]
             auction_json = self.get_auction_json(url, court_id, category_id, status_id)
-            mysql.upsert_auction(auction_json)
+            mysql_instance.upsert_auction(auction_json)
 
     def spider_auctions(self, court_list):
         print("Start Craw...")
+        mysql_instance = MySQL.MySQL()
+        categories = mysql_instance.get_categories()
+        statuses = mysql_instance.get_statuses()
         for court in court_list:
             print('Thread Id: ' + str(threading.currentThread().ident), end='')
             print(court)
@@ -140,9 +143,9 @@ class AuctionSpiderGPai:
                 continue
             else:
                 print(court[2] + ": has auctions, start to craw")
-                for category in mysql.get_categories():
+                for category in categories:
                     category_id = category[1]
-                    for status in mysql.get_statuses():
+                    for status in statuses:
                         if status[3] == 0:
                             continue
                         url_auctions_list = 'http://s.gpai.net/sf/court.do?id=' + str(court[1]) + '&at=' + category_id + '&restate=' + str(status[1])
@@ -158,7 +161,7 @@ class AuctionSpiderGPai:
                             print('total count: ' + str(total_count) + ' page count: ' + str(page_total))
                             for page_number in range(1, page_total + 1):
                                 url = url_auctions_list + '&page=' + str(page_number)
-                                self.spider_auction_and_insert(url, court[1], category_id, status[1])
+                                self.spider_auction_and_insert(url, court[1], category_id, status[1], mysql_instance)
             print(court[2] + ": spider finish")
         print("Finish Craw...")
 
@@ -169,7 +172,7 @@ if __name__ == '__main__':
     print(DateTimeUtil.get_current_time() + " start main progress")
     # prepare
     courts = mysql.get_courts()
-    thread_count = 3
+    thread_count = 2
     each_count = len(courts) // thread_count
     # start multiple thread
     thread_array = {}
@@ -183,4 +186,4 @@ if __name__ == '__main__':
         thread_array[i].join()
     end_time = time.time()
     print("Total time: {}".format(end_time - start_time))
-    print(DateTimeUtil.get_current_time() + "end main progress")
+    print(DateTimeUtil.get_current_time() + " end main progress")
